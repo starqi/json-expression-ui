@@ -1,0 +1,76 @@
+<html>
+    <head>
+        <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    </head>
+    <body>
+        <script>
+            const types = [
+                ['---'],
+                ['equals', 'a', 'b'],
+                ['or', '#values'],
+                ['expression-input'],
+            ];
+
+            const typeByKey = {};
+            for (const t of types) {
+                typeByKey[t[0]] = t.slice(1);
+            }
+
+            const sample = {
+                output: 123,
+                condition: {
+                    type: 'equals',
+                    a: false,
+                    b: {
+                        type: 'expression-input'
+                    }
+                }
+            };
+
+            function X(x) {
+                for (key in x) {
+                }
+            }
+
+            function makeComponent(indentCounter) {
+                const output = $(`\
+                    <div style='margin-left:${indentCounter * 30}px;'>
+                        <div>
+                            <label>Type</label>
+                            <select class='typeSelect'></select>
+                        </div>
+                        <div class='typeBody'>
+                        </div>
+                    </div>
+                `);
+                const select = output.find(`.typeSelect`);
+                const body = output.find(`.typeBody`);
+                for (const t of types) {
+                    select.append($(`<option>${t[0]}</option>`));
+                }
+                select.on('change', (e) => {
+                    const componentBody = $(e.target).parent().siblings('.typeBody');
+                    componentBody.html('');
+                    for (const param of typeByKey[e.target.value]) {
+                        const paramComponent = makeComponent(indentCounter + 1);
+                        const holder = $(`
+                            <div>
+                                <div>
+                                    <label>${param}</label>
+                                </div>
+                            </div>
+                        `);
+                        holder.children().append(paramComponent);
+                        componentBody.append(holder);
+                    }
+                });
+                return output;
+            }
+
+            function makeList(identCounter) {
+            }
+
+            $('body').append(makeComponent(0));
+        </script>
+    </body>
+</html>
