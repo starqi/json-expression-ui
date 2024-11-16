@@ -1,22 +1,54 @@
 <html>
     <head>
         <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+        <style>
+            input[type='text'] {
+                border-radius: 5px;
+                margin-top: 4px;
+            }
+            select {
+                border-radius: 5px;
+                margin-top: 4px;
+            }
+            body {
+                font-family: monospace;
+            }
+        </style>
     </head>
     <body>
         <script>
-            const types = [
+            // Prefixes:
+            // # is a list
+            // % uses string type as default, which is very common
+            // $ adds a textbox without a label
+            const TYPES = [
                 ['---'],
-                ['equals', 'a', 'b'],
-                ['or', '#values'],
+
+                // Boolean
+                ['or', '#Values'],
+                ['and', '#Values'],
+                ['not', 'Value'],
+
+                // Functions
+                ['find', '%Param'],
+                ['contains', '%value', '#List'],
+                ['equals', 'a', '%b'],
+
+                // Literals
                 ['expression-input'],
+                ['string', '$a'],
+
+                // Macros
+                ['not-equals', 'a', '%b'],
+                ['find-equals', '%Param', '%Value'],
             ];
 
-            const typeByKey = {};
-            for (const t of types) {
-                typeByKey[t[0]] = t.slice(1);
+            const TYPE_BY_KEY = {};
+            for (const t of TYPES) {
+                TYPE_BY_KEY[t[0]] = t.slice(1);
             }
 
-            const sample = {
+            const SAMPLE = {
                 output: 123,
                 condition: {
                     type: 'equals',
@@ -32,9 +64,9 @@
                 }
             }
 
-            function makeComponent(indentCounter) {
+            function makeComponent(defaultType) {
                 const output = $(`\
-                    <div style='margin-left:${indentCounter * 30}px;'>
+                    <div style='margin-left:30px;'>
                         <div>
                             <label>Type</label>
                             <select class='typeSelect'></select>
@@ -45,32 +77,62 @@
                 `);
                 const select = output.find(`.typeSelect`);
                 const body = output.find(`.typeBody`);
-                for (const t of types) {
+                for (const t of TYPES) {
                     select.append($(`<option>${t[0]}</option>`));
                 }
                 select.on('change', (e) => {
                     const componentBody = $(e.target).parent().siblings('.typeBody');
-                    componentBody.html('');
-                    for (const param of typeByKey[e.target.value]) {
-                        const paramComponent = makeComponent(indentCounter + 1);
-                        const holder = $(`
+                    fillWithMap(e.target.value, componentBody);
+                });
+                if (defaultType !== undefined) {
+                    select[0].value = defaultType;
+                    const componentBody = output.children('.typeBody');
+                    fillWithMap(defaultType, componentBody);
+                }
+                return output;
+            }
+
+            function fillWithMap(typeKey, componentBody) {
+                componentBody.html('');
+                for (const param of TYPE_BY_KEY[typeKey]) {
+                    const paramComponent = param[0] == '#' ? makeList() : (param[0] == '$' ? makeTextbox() : makeComponent(param[0] == '%' ? 'string' : undefined));
+                    const holder = $(`
+                        <div>
                             <div>
-                                <div>
-                                    <label>${param}</label>
-                                </div>
+                                <label>${param[0] == '#' || param[0] == '%' ? param.substring(1) :
+                                            (param[0] == '$' ? '' : param)}</label>
                             </div>
-                        `);
-                        holder.children().append(paramComponent);
-                        componentBody.append(holder);
-                    }
+                        </div>
+                    `);
+                    holder.children().append(paramComponent);
+                    componentBody.append(holder);
+                }
+            }
+
+            function makeList() {
+                const output = $(`
+                    <div>
+                        <div class='listHolder'></div>
+                        <button class='add'>+</button>
+                    </div>
+                `);
+                output.find('.add').on('click', (e) => {
+                    const listHolder = $(e.target).siblings('.listHolder');
+                    listHolder.append(makeComponent());
+                    listHolder.append(`<hr>`);
                 });
                 return output;
             }
 
-            function makeList(identCounter) {
+            function makeTextbox() {
+                const output = $(`
+                    <input type='text'></input>
+                `);
+                return output;
             }
 
-            $('body').append(makeComponent(0));
+            const root = makeComponent();
+            $('body').append(root);
         </script>
     </body>
 </html>
