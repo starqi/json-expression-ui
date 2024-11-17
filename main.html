@@ -2,6 +2,9 @@
     <head>
         <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
         <style>
+            .mainSection {
+                margin-top: 10px;
+            }
             input[type='text'] {
                 border-radius: 5px;
                 margin-top: 4px;
@@ -16,32 +19,61 @@
         </style>
     </head>
     <body>
+        <div>
+            <div class="mainSection">
+                <label>output</label>
+            </div>
+            <div>
+                <input id="output" type="text"></input>
+            </div>
+            <div class="mainSection">
+                <label>condition</label>
+            </div>
+            <div id="conditionHolder"></div>
+            <div style="height:30px;"></div>
+            <div class="mainSection">
+                <button id="generate">Generate</button>
+            </div>
+            <div class="mainSection">
+                <textarea style="width:100%;height:250px;" id="generated"></textarea>
+            </div>
+        </div>
         <script>
+
+            //////////////////////////////////////////////////
+            // Config
+
+            const NO_TYPE = '---';
+
             // Prefixes:
             // # is a list
             // % uses string type as default, which is very common
-            // $ adds a textbox without a label
+            // $ adds a textbox
             const TYPES = [
-                ['---'],
+                [NO_TYPE],
 
                 // Boolean
-                ['or', '#Values'],
-                ['and', '#Values'],
-                ['not', 'Value'],
+                ['or', '#values'],
+                ['and', '#values'],
+                ['not', 'value'],
 
                 // Functions
-                ['find', '%Param'],
-                ['contains', '%value', '#List'],
+                ['find', '%param'],
+                ['contains', '%value', '#list'],
                 ['equals', 'a', '%b'],
 
                 // Literals
                 ['expression-input'],
-                ['string', '$a'],
+                ['null-type'],
+                ['always-true'],
+                ['string', '$value'],
 
                 // Macros
                 ['not-equals', 'a', '%b'],
-                ['find-equals', '%Param', '%Value'],
+                ['find-equals', '%param', '%value'],
             ];
+
+            const TYPES_ALPHABETICAL = TYPES.map((x) => x[0]).sort();
 
             const TYPE_BY_KEY = {};
             for (const t of TYPES) {
@@ -59,37 +91,35 @@
                 }
             };
 
-            function X(x) {
-                for (key in x) {
-                }
-            }
+            //////////////////////////////////////////////////
+            // Builder
 
-            function makeComponent(defaultType) {
-                const output = $(`\
-                    <div style='margin-left:30px;'>
+            function makeComponent(defaultType, noIndent) {
+                const c = $(`
+                    <div class='component' style='margin-left:${noIndent === true ? 0 : 30}px;'>
                         <div>
-                            <label>Type</label>
+                            <label>type</label>
                             <select class='typeSelect'></select>
                         </div>
-                        <div class='typeBody'>
+                        <div class='componentBody'>
                         </div>
                     </div>
                 `);
-                const select = output.find(`.typeSelect`);
-                const body = output.find(`.typeBody`);
-                for (const t of TYPES) {
-                    select.append($(`<option>${t[0]}</option>`));
+                const select = c.find(`.typeSelect`);
+                const body = c.find(`.componentBody`);
+                for (const t of TYPES_ALPHABETICAL) {
+                    select.append($(`<option>${t}</option>`));
                 }
                 select.on('change', (e) => {
-                    const componentBody = $(e.target).parent().siblings('.typeBody');
+                    const componentBody = $(e.target).parent().siblings('.componentBody');
                     fillWithMap(e.target.value, componentBody);
                 });
                 if (defaultType !== undefined) {
                     select[0].value = defaultType;
-                    const componentBody = output.children('.typeBody');
+                    const componentBody = c.children('.componentBody');
                     fillWithMap(defaultType, componentBody);
                 }
-                return output;
+                return c;
             }
 
             function fillWithMap(typeKey, componentBody) {
@@ -97,42 +127,97 @@
                 for (const param of TYPE_BY_KEY[typeKey]) {
                     const paramComponent = param[0] == '#' ? makeList() : (param[0] == '$' ? makeTextbox() : makeComponent(param[0] == '%' ? 'string' : undefined));
                     const holder = $(`
-                        <div>
+                        <div class='componentParam'>
                             <div>
-                                <label>${param[0] == '#' || param[0] == '%' ? param.substring(1) :
-                                            (param[0] == '$' ? '' : param)}</label>
+                                <label>${!param[0].match(/[a-zA-Z0-9]/) ? param.substring(1) : param}</label>
                             </div>
                         </div>
                     `);
-                    holder.children().append(paramComponent);
+                    holder.append(paramComponent);
                     componentBody.append(holder);
                 }
             }
 
             function makeList() {
-                const output = $(`
-                    <div>
+                const l = $(`
+                    <div class='list'>
                         <div class='listHolder'></div>
                         <button class='add'>+</button>
                     </div>
                 `);
-                output.find('.add').on('click', (e) => {
+                l.find('.add').on('click', (e) => {
                     const listHolder = $(e.target).siblings('.listHolder');
-                    listHolder.append(makeComponent());
+                    listHolder.append(makeComponent('string'));
                     listHolder.append(`<hr>`);
                 });
-                return output;
+                return l;
             }
 
             function makeTextbox() {
-                const output = $(`
+                const i = $(`
                     <input type='text'></input>
                 `);
-                return output;
+                return i;
             }
 
-            const root = makeComponent();
-            $('body').append(root);
+            //////////////////////////////////////////////////
+            // Generate
+
+            function generateConditionObj(componentOrListOrTextbox) {
+                if (componentOrListOrTextbox.is('input')) {
+                    return componentOrListOrTextbox.val();
+                } else if (componentOrListOrTextbox.hasClass('list')) {
+                    const items = componentOrListOrTextbox.children('.listHolder').children('.component');
+
+                    const x = [];
+                    for (const i of items) {
+                        x.push(generateConditionObj($(i)));
+                    }
+                    return x;
+                } else if (componentOrListOrTextbox.hasClass('component')) {
+
+                    const o = {};
+
+                    const val = componentOrListOrTextbox.children(':nth-child(1)').children('.typeSelect').val();
+                    if (val === NO_TYPE || TYPE_BY_KEY[val] === undefined) throw new Error('Please finish selecting all type fields');
+                    o['type'] = val;
+
+                    const params = componentOrListOrTextbox.children('.componentBody').children('.componentParam');
+                    for (const _p of params) {
+                        const p = $(_p);
+                        const label = p.children('div').children('label').text();
+                        const r = generateConditionObj($(p.children()[1]));
+                        o[label] = r;
+                    }
+
+                    if (o.type === 'string') return o['value'];
+                    return o;
+                } else {
+                    console.error(componentOrListOrTextbox);
+                    throw new Error('Unexpected: Cannot determine type of component');
+                }
+            }
+
+            //////////////////////////////////////////////////
+            // DOM
+
+            const root = makeComponent(undefined, true);
+            $('#conditionHolder').append(root);
+
+            const generated = $('#generated');
+            const output = $('#output');
+
+            $('#generate').on('click', (e) => {
+                try {
+                    const conditionObj = generateConditionObj(root);
+                    generated.val(JSON.stringify({
+                        output: output.val(),
+                        condition: conditionObj
+                    }));
+                } catch (e) {
+                    generated.val('ERROR: ' + e.message);
+                }
+            });
         </script>
     </body>
 </html>
