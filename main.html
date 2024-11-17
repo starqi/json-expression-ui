@@ -33,6 +33,7 @@
             <div style="height:30px;"></div>
             <div class="mainSection">
                 <button id="generate">Generate</button>
+                <button id="read">Read</button>
             </div>
             <div class="mainSection">
                 <textarea style="width:100%;height:250px;" id="generated"></textarea>
@@ -44,6 +45,7 @@
             // Config
 
             const NO_TYPE = '---';
+            const STRING_TYPE = 'string';
 
             // Prefixes:
             // # is a list
@@ -66,7 +68,7 @@
                 ['expression-input'],
                 ['null-type'],
                 ['always-true'],
-                ['string', '$value'],
+                [STRING_TYPE, '$value'],
 
                 // Macros
                 ['not-equals', 'a', '%b'],
@@ -125,20 +127,20 @@
             function fillWithMap(typeKey, componentBody) {
                 componentBody.html('');
                 for (const param of TYPE_BY_KEY[typeKey]) {
-                    const paramComponent = param[0] == '#' ? makeList() : (param[0] == '$' ? makeTextbox() : makeComponent(param[0] == '%' ? 'string' : undefined));
-                    const holder = $(`
+                    const paramComponent = param[0] == '#' ? makeList() : (param[0] == '$' ? makeTextbox() : makeComponent(param[0] == '%' ? STRING_TYPE : undefined));
+                    const paramHolder = $(`
                         <div class='componentParam'>
                             <div>
                                 <label>${!param[0].match(/[a-zA-Z0-9]/) ? param.substring(1) : param}</label>
                             </div>
                         </div>
                     `);
-                    holder.append(paramComponent);
-                    componentBody.append(holder);
+                    paramHolder.append(paramComponent);
+                    componentBody.append(paramHolder);
                 }
             }
 
-            function makeList() {
+            function makeList(defaultType) {
                 const l = $(`
                     <div class='list'>
                         <div class='listHolder'></div>
@@ -147,7 +149,7 @@
                 `);
                 l.find('.add').on('click', (e) => {
                     const listHolder = $(e.target).siblings('.listHolder');
-                    listHolder.append(makeComponent('string'));
+                    listHolder.append(makeComponent(defaultType));
                     listHolder.append(`<hr>`);
                 });
                 return l;
@@ -190,11 +192,57 @@
                         o[label] = r;
                     }
 
-                    if (o.type === 'string') return o['value'];
+                    if (o.type === STRING_TYPE) return o['value'];
                     return o;
                 } else {
                     console.error(componentOrListOrTextbox);
                     throw new Error('Unexpected: Cannot determine type of component');
+                }
+            }
+
+            function readInto(componentOrListToModify, _obj) {
+                if (componentOrListToModify.hasClass('component')) {
+                    let obj;
+                    if (typeof _obj !== 'object' || Array.isArray(_obj)) {
+                        obj = {type: STRING_TYPE, value: _obj.toString()};
+                    } else {
+                        obj = _obj;
+                    }
+
+                    if (TYPE_BY_KEY[obj.type] === undefined) throw new Error(`Invalid type: ${obj.type}`);
+
+                    componentOrListToModify.children(':nth-child(1)').children('.typeSelect').val(obj.type);
+                    const body = componentOrListToModify.find(`.componentBody`);
+                    fillWithMap(obj.type, body);
+
+                    if (obj.type === STRING_TYPE) {
+                        const textbox = body.children('.componentParam').children('input:nth-child(2)');
+                        textbox.val(obj.value);
+                    } else {
+                        const params = body.children('.componentParam');
+                        for (const _p of params) {
+                            const p = $(_p);
+
+                            const label = p.children(':nth-child(1)').children('label').text();
+                            if (obj[label] === undefined) throw new Error(`Could not find required property '${label}' in input object ${JSON.stringify(_obj)}`);
+
+                            readInto(p.children(':nth-child(2)'), obj[label]);
+                        }
+                    }
+                } else if (componentOrListToModify.hasClass('list')) {
+                    if (!Array.isArray(_obj))
+                        throw new Error(`Unexpected: Input should be an array, it was ${JSON.stringify(_obj)}`);
+
+                    const listHolder = componentOrListToModify.children('.listHolder');
+                    listHolder.html('');
+                    for (const item of _obj) {
+                        const c = makeComponent();
+                        listHolder.append(c);
+                        listHolder.append(`<hr>`);
+                        readInto(c, item);
+                    }
+                } else {
+                    throw new Error('Unexpected: Input is not a list or component');
                 }
             }
 
@@ -216,6 +264,18 @@
                     }));
                 } catch (e) {
                     generated.val('ERROR: ' + e.message);
+                }
+            });
+            $('#read').on('click', (e) => {
+                try {
+                    const parsed = JSON.parse(generated.val());
+                    if (parsed.condition === undefined) throw new Error('Expected \'condition\' property in input');
+                    output.val(parsed.output);
+                    readInto(root, parsed.condition);
+                } catch (e) {
+                    root.children().children('.typeSelect').val(NO_TYPE);
+                    fillWithMap(NO_TYPE, root.children('.componentBody'));
+                    alert(e);
                 }
             });
         </script>
